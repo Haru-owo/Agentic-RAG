@@ -26,7 +26,7 @@ Resolves metadata mapping for raw enterprise files with inconsistent naming conv
 
 ## 3. Directory Structure
 
-Ensure your project directory matches the following structure before execution:
+Ensure your project directory matches the following structure before execution. The `start.sh` script is already included in the root directory.
 
     enterprise-rag/
     ├── data/                  # Drop raw documents here (Nested folders supported)
@@ -44,46 +44,9 @@ Ensure Ollama is running as a background service, then pull the required model.
 ollama pull nemotron-3-super
 ```
 
-### Step 2: Create start.sh
-Create a `start.sh` file in your root directory and paste the following bash script. This script automates virtual environment creation, dependency installation, and the sequential execution of the RAG pipeline.
+### Step 2: Run the Pipeline
+The provided `start.sh` script automatically handles the virtual environment (`venv`) setup, dependency installation, and sequential execution of the entire pipeline (Preprocessing -> Embedding -> Web UI).
 
-```bash
-#!/bin/bash
-
-# Exit immediately if a command exits with a non-zero status
-set -e
-
-echo "[INFO] Initializing Enterprise Agentic RAG Pipeline..."
-
-# 1. Virtual Environment Setup
-if [ ! -d "venv" ]; then
-    echo "[INFO] Creating Python virtual environment (venv)..."
-    python3 -m venv venv
-fi
-
-echo "[INFO] Activating virtual environment..."
-source venv/bin/activate
-
-echo "[INFO] Installing required dependencies..."
-pip install --upgrade pip
-pip install -r requirements.txt
-
-# 2. Data Preprocessing & Auto-Tagging
-echo "[INFO] Executing Phase 1: Smart Tagger (Catalog Generation)..."
-python smart_tagger.py
-
-# 3. Vectorization & Embedding
-echo "[INFO] Executing Phase 2: Indexer (ChromaDB & BM25 Setup)..."
-python indexer.py
-
-# 4. Web UI & Inference
-echo "[INFO] Executing Phase 3: RAG Query Pipeline (Gradio UI)..."
-python rag_query_pipeline.py
-
-echo "[INFO] Pipeline terminated."
-```
-
-### Step 3: Run the Pipeline
 Grant execution permissions to the script and run it. The Web UI will be exposed on `0.0.0.0:7860`.
 
 ```bash
