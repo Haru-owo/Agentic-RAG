@@ -1,0 +1,14 @@
+langchain
+langchain-community
+langchain-core
+langchain-text-splitters
+langchain-chroma
+langchain-huggingface
+langchain-ollama
+chromadb
+sentence-transformers
+rank_bm25
+gradio>=4.0.0
+tqdm
+python-docx
+openpyxl
