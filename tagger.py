@@ -4,7 +4,7 @@ Module: 2-Track Auto-Tagger & Catalog Generator
 Description: 
     - Office 문서 파싱 (DOCX, XLSX)
     - 임시 파일(~$ 등) 필터링
-    - 공백 제거 기반 정규식 매칭 (띄어쓰기 예외 방어)
+    - 공백 제거 기반 정규식 매칭
     - YY_MM_DD 날짜 패턴 정규식 추가
 """
 
@@ -91,7 +91,7 @@ class MetadataTagger:
         year_folder_match = re.search(r'/(20\d{2})/', path_clean)
         short_year_match = re.search(r'\'?(\d{2})년', path_clean)
         date_pattern_match = re.search(r'\(?(\d{2})(\d{2})\d{2}\)?', filename_clean)
-        yy_mm_dd_match = re.search(r'(\d{2})_(\d{2})_\d{2}', filename) # 17_05_29 패턴 대응
+        yy_mm_dd_match = re.search(r'(\d{2})_(\d{2})_\d{2}', filename)
 
         if year_match: metadata["year"] = int(year_match.group(1))
         elif year_folder_match: metadata["year"] = int(year_folder_match.group(1))
@@ -122,6 +122,7 @@ class MetadataTagger:
                 for row in ws.iter_rows(values_only=True):
                     row_data = [str(cell) for cell in row if cell is not None]
                     if row_data: snippet += " ".join(row_data) + "\n"
+                wb.close() # OOM 및 File descriptor leak 방어
             elif ext in ['.txt', '.md', '.csv']:
                 snippet = file_path.read_text(encoding='utf-8', errors='ignore')
             elif ext in ['.jpg', '.png', '.pptx', '.pdf']:
@@ -199,11 +200,11 @@ class MetadataTagger:
             if meta["doc_type"] == "Unknown" or meta["year"] is None:
                 llm_meta = self.extract_via_llm(fpath)
                 
-                # 덮어쓰기 방어
+                # 덮어쓰기 로직 수정 (정규식 결과가 우선, 없으면 LLM 결과 사용)
                 if llm_meta.get("doc_type") and llm_meta.get("doc_type") != "Unknown":
                     meta["doc_type"] = llm_meta["doc_type"]
-                meta["year"] = llm_meta.get("year") or meta["year"]
-                meta["month"] = llm_meta.get("month") or meta["month"]
+                meta["year"] = meta.get("year") or llm_meta.get("year")
+                meta["month"] = meta.get("month") or llm_meta.get("month")
                 success_llm += 1
             else:
                 success_regex += 1
