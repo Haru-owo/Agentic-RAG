@@ -1,4 +1,3 @@
-```markdown
 # Enterprise Agentic RAG Pipeline
 
 An air-gapped, multi-hop Agentic Retrieval-Augmented Generation (RAG) pipeline designed for parsing, indexing, and querying unstructured enterprise legacy documents (DOCX, XLSX, PDF, MD). 
@@ -96,4 +95,3 @@ chmod +x start.sh
 
 * **CUDA Out of Memory (OOM):** If the LLM crashes during inference, decrease the context window limit in `rag_query_pipeline.py`. Update `num_ctx` in the `OllamaLLM` instantiation from `16384` to `8192` or `4096`.
 * **Corrupted Office Files:** The parser automatically catches `Exception` during DOCX/XLSX binary reads. If a file is corrupted, it logs a parsing error and uses the filename as the text snippet fallback to prevent pipeline crashes.
-```
