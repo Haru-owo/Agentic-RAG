@@ -1,60 +1,84 @@
-# Enterprise Agentic RAG Pipeline
+# Agentic RAG Pipeline (WIP)
 
-An air-gapped, multi-hop Agentic Retrieval-Augmented Generation (RAG) pipeline designed for parsing, indexing, and querying unstructured enterprise legacy documents (DOCX, XLSX, PDF, MD). 
+Experimental Retrieval-Augmented Generation (RAG) pipeline focusing on structured indexing of heterogeneous enterprise documents.
 
-This system mitigates the core limitations of naive RAG architectures—such as context truncation, failure in temporal reasoning, and inaccurate aggregation—by implementing hybrid retrieval (BM25 + Vector MMR) and a 2-track LLM-assisted metadata cataloging system.
+**Current Status:** Only the Phase 1 metadata extraction module (`tagger.py`) is implemented.
 
-## 1. System Requirements
+## 1. System Requirements & Setup
 
-* **Python:** Version 3.10 or higher is strictly required.
-* **Ollama:** Must be installed locally for on-premise LLM inference.
-* **Framework:** LangChain v0.2.x ecosystem.
-* **Hardware:** CUDA-compatible GPU is highly recommended for local embedding and LLM inference.
+* **Python:** >= 3.10
+* **Local LLM:** Ollama running `nemotron-3-super` (default)
+* **Dependencies:**
+  ```bash
+  pip install langchain-ollama langchain-core python-docx openpyxl
+  ```
 
-## 2. Architecture & Core Features
+## 2. Architecture: Phase 1 Tagger (`tagger.py`)
 
-### 2.1. 2-Track Auto-Tagging (Data Preprocessing)
-Resolves metadata mapping for raw enterprise files with inconsistent naming conventions.
-* **Track 1 (Regex Fast-track):** Heuristic extraction of year, month, and document category based on path and filename regular expressions. Handles the majority of the dataset at high throughput.
-* **Track 2 (LLM Zero-shot Fallback):** For unclassified documents, extracts a 500-character snippet and routes it to a local LLM for zero-shot classification. 
-* State management is handled via `file_catalog.json` with built-in auto-save and resume capabilities.
+The `tagger.py` module implements a deterministic/probabilistic hybrid approach to generate a structured `file_catalog.json`. It includes state management for process resume capability.
 
-### 2.2. Hybrid Retrieval & Temporal Expansion
-* **Ensemble Retriever:** Combines `BM25` (Sparse retrieval for exact keyword matching) with `BGE-M3` (Dense retrieval for semantic matching) at a 50:50 weight.
-* **Maximal Marginal Relevance (MMR):** Applied to the dense retriever to ensure diversity in the fetched context and prevent duplicate information from monopolizing the context window.
-* **Dynamic Temporal Injection:** Automatically injects the current system timestamp into the query. Forces the LLM to perform relative temporal reasoning (e.g., mapping "latest" or "last 5 years" to exact chronological context).
+### 2.1. Supported File Types
+The parser handles target extensions via `rglob`. Temporary files (prefixed with `~$`) are automatically filtered.
+
+| Category | Extensions | Parsing Method | Fallback |
+| :--- | :--- | :--- | :--- |
+| Text | `.txt`, `.md`, `.csv` | UTF-8 read (ignore errors) | Filename only |
+| Office | `.docx`, `.xlsx` | `python-docx`, `openpyxl` (data_only) | Filename only |
+| Media/Binary | `.pdf`, `.pptx`, `.jpg`, `.png`| Not implemented (Metadata only) | Filename only |
+
+### 2.2. Metadata Extraction Logic (2-Track)
+
+#### Track 1: Regex-based Deterministic Extraction
+Performs heuristic matching on space-stripped paths and filenames.
+
+1.  **Document Type Classification:** Maps substrings to defined categories:
+    * `일일정비일지`, `정비실적보고`, `주간업무보고`, `MSDS`, `장비이력`, `정기검사`, `기술매뉴얼`, `일반`
+2.  **Temporal Extraction:** Parses year and month using multiple patterns:
+    * YYYY년, /YYYY/, 'YY년, (YYMMDD), YY_MM_DD
+
+#### Track 2: LLM-based Probabilistic Fallback
+Triggered if Track 1 fails to resolve `doc_type` or `year`.
+
+* **Input:** Full text extraction (or filename fallback).
+* **Model:** Ollama (`nemotron-3-super`), Temp 0.0.
+* **Prompt Structure:** Instructs the LLM as a classification agent to output strict JSON containing `doc_type`, `year`, and `month` based on a predefined schema.
+
+### 2.3. Schema & State Management
+
+Output is serialized to `file_catalog.json`. The system loads existing catalogs on startup to skip already processed files, using relative paths as keys.
+
+```json
+// file_catalog.json schema example
+{
+    "relative/path/to/file.docx": {
+        "filename": "file.docx",
+        "directory": "parent_dir",
+        "doc_type": "주간업무보고",
+        "year": 2024,
+        "month": 5
+    }
+}
+```
 
 ## 3. Directory Structure
 
-Ensure your project directory matches the following structure before execution. The `start.sh` script is already included in the root directory.
-
-    enterprise-rag/
-    ├── data/                  # Drop raw documents here (Nested folders supported)
-    ├── smart_tagger.py        # Phase 1: Metadata extraction & cataloging
-    ├── indexer.py             # Phase 2: Parent-Child chunking & ChromaDB embedding
-    ├── rag_query_pipeline.py  # Phase 3: Gradio Web UI & LLM Inference
-    ├── requirements.txt       # Dependencies list
-    └── start.sh               # Automated entrypoint script
-
-## 4. Setup & Execution
-
-### Step 1: Initialize Local LLM
-Ensure Ollama is running as a background service, then pull the required model.
-```bash
-ollama pull nemotron-3-super
+```text
+enterprise-rag/
+├── data/                  # Source directory for raw documents (supports nesting)
+├── tagger.py              # Implemented: Metadata extraction & cataloging
+├── file_catalog.json      # Generated: State file and structured metadata
+└── requirements.txt
 ```
 
-### Step 2: Run the Pipeline
-The provided `start.sh` script automatically handles the virtual environment (`venv`) setup, dependency installation, and sequential execution of the entire pipeline (Preprocessing -> Embedding -> Web UI).
-
-Grant execution permissions to the script and run it. The Web UI will be exposed on `0.0.0.0:7860`.
+## 4. Usage
 
 ```bash
-chmod +x start.sh
-./start.sh
+# Execute the tagging pipeline
+python tagger.py
 ```
 
-## 5. Troubleshooting
+## 5. Technical Notes & Known Issues
 
-* **CUDA Out of Memory (OOM):** If the LLM crashes during inference, decrease the context window limit in `rag_query_pipeline.py`. Update `num_ctx` in the `OllamaLLM` instantiation from `16384` to `8192` or `4096`.
-* **Corrupted Office Files:** The parser automatically catches `Exception` during DOCX/XLSX binary reads. If a file is corrupted, it logs a parsing error and uses the filename as the text snippet fallback to prevent pipeline crashes.
+* **OOM Prevention (`.xlsx`):** The Excel parser utilizes `read_only=True` and explicit `wb.close()` to mitigate Out-Of-Memory issues and file descriptor leaks during large batch processing.
+* **LLM Context Window:** If processing dense documents, the local LLM may hit context limits. Monitor Ollama resources during Track 2 execution.
+* **OCR:** No OCR capability is implemented for image files or image-based PDFs; classification relies solely on the filename for these types.
